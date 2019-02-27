@@ -6,32 +6,37 @@ import ftplib
 from PyQt5 import QtWidgets, QtCore
 from functools import partial
 
+global tmptxt
+tmptxt="hello world"
 class Popup(QtWidgets.QWidget):
     def __init__(self):
         super(Popup,self).__init__()
         self.setGeometry(250, 220, 300, 200)
         self.setWindowTitle("Remove File")
 
-        
-class FtpUploadTracker(QtWidgets.QWidget):
+'''
+class FtpUploadTracker():
     sizeWritten = 0
     totalSize = 0
     lastShownPercent = 0
 
     def __init__(self, totalSize):
-        super(FtpUploadTracker,self).__init__()
-        self.setGeometry(250,220,300,200)
-        self.setWindowTitle("Progress Box")
-        
         self.totalSize = totalSize
 
     def handle(self, block):
         self.sizeWritten += 1024
         percentComplete = round((self.sizeWritten / self.totalSize) * 100)
-
+        tmptxt="thi is tmp"
         if (self.lastShownPercent != percentComplete):
             self.lastShownPercent = percentComplete
+
+            progresslbl.setText(str(percentComplete) + " percent Complete")
             print(str(percentComplete) + " percent Complete")
+            self.updatelbl(percentComplete)
+    def updatelbl(self,percentComplete):
+        progresslbl.setText(str(percentComplete) + " percent Complete")'''
+
+            
             
         
 
@@ -106,6 +111,14 @@ class Window(QtWidgets.QWidget):
         btn3.clicked.connect(self.sProcess)
         btn3.setToolTip("Click to start the process")
         btn3.setFixedSize(150, 50)
+        
+        self.progresslbl=QtWidgets.QLabel(self)
+            
+
+        '''progresslbl = QtWidgets.QLineEdit(self)
+        progresslbl.setMaximumHeight(40)
+        progresslbl.setPlaceholderText("Progress")
+        progresslbl.hide()'''
         #Send to ftp button
         btn4=QtWidgets.QPushButton("Send to Ftp",self)
         btn4.clicked.connect(self.login)
@@ -117,6 +130,9 @@ class Window(QtWidgets.QWidget):
         btn5.clicked.connect(self.DeleteFile)
         btn5.setToolTip("Click to Remove the File")
         btn5.setFixedSize(150,50)
+
+        
+
 
         # main Layout of the windows adding widget
         hbox = QtWidgets.QHBoxLayout()
@@ -144,6 +160,7 @@ class Window(QtWidgets.QWidget):
         hbox2.addWidget(btn5)
         hbox2.addStretch(0)
         mainLayout.addLayout(hbox2)
+        mainLayout.addWidget(self.progresslbl)
 
         mainLayout.addStretch(0)
         mainLayout.setSpacing(15)
@@ -226,7 +243,26 @@ class Window(QtWidgets.QWidget):
         self.dropboxtext = text
         print(self.dropboxtext)
 
+    def uploadTracker(self,block):
+        
+        
+        self.sizeWritten += 1024
+        percentComplete = round((self.sizeWritten / self.totalSize) * 100)
+
+
+        if (self.lastShownPercent != percentComplete):
+            self.lastShownPercent = percentComplete
+
+            self.progresslbl.setText(str(percentComplete) + " percent Complete")
+            QtWidgets.QApplication.processEvents()
+            print(str(percentComplete) + " percent Complete")
+            if percentComplete == 100 :
+                self.progresslbl.setText(str(percentComplete) + " percent Complete \n Your file was send succesfully.")
+
+
+
     def login(self):
+        
         session=ftplib.FTP()
         sessionip="192.168.2.100"
         sessionhost=1026
@@ -237,17 +273,17 @@ class Window(QtWidgets.QWidget):
         session.login(sessionuser,sessionpwd)
         print(session.getwelcome())
         print("opening file")
-        print(self.videopath)
+        #print(self.videopath)
+        #self.videopath
+        self.sizeWritten=0
+        self.lastShownPercent=0
         file=open(self.videopath,"rb")
-        totalSize = os.path.getsize(self.videopath)
-        uploadTracker = FtpUploadTracker(int(totalSize))
-        self.uploadlabel=QtWidgets.QLabel(uploadTracker)
-        self.uploadlabel.text="0 Percent"
-        uploadTracker.show()
-        session.storbinary('STOR {}.mp4'.format(self.txtBox3.text()),file,1024,uploadTracker.handle)
+        self.totalSize = os.path.getsize(self.videopath)
+
+        #self.txtBox3.text()
+        session.storbinary('STOR {}.mp4'.format(self.txtBox3.text()),file,1024,self.uploadTracker)
         file.close()
         print(session.dir())
-        uploadTracker.show()
         session.quit()
         
 
@@ -316,9 +352,9 @@ class Window(QtWidgets.QWidget):
 
         pdfToImg = ("include/poppler/bin/pdftoppm.exe")
         pdf = '"{}"'.format(self.txtBox1.text())
-        process = subprocess.Popen('"%s" -png %s tmp/out' % (pdfToImg, pdf))
+        process = subprocess.Popen('"%s" -png %s tmp/out' % (pdfToImg, pdf),stdout=subprocess.PIPE)
         process.wait()
-        return True
+        
 
     def vidConvert(self):
         video = '"{}/{}.mp4"'.format(self.txtBox2.text(), self.txtBox3.text())
@@ -344,7 +380,7 @@ class Window(QtWidgets.QWidget):
             lst += "[v{}]".format(i)
             effect += '[{0}:v]scale={1}:force_original_aspect_ratio=decrease,pad={1}:(ow-iw)/2:(oh-ih)/2,setsar=1,fade=t=in:st=0:d=1,fade=t=out:st={2}:d=1[v{0}];'.format(
                 i, res, delay)
-
+            
         process = subprocess.Popen('include\\ffmpeg\\bin\\ffmpeg.exe -y  \
         {} \
         -filter_complex \

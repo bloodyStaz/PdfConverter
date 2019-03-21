@@ -1,19 +1,22 @@
 import sys
 import os
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5 import QtWidgets
 import subprocess
 import time
 import shutil
+import ftplib
 
 class MyThread(QThread):
     signal=pyqtSignal(str)
-    def __init__(self,fileOptionState,file,logoState=None,logoPath=None,delay=10):
+    def __init__(self,fileOptionState,file,fileName,logoState=None,logoPath=None,delay=10):
         super(QThread,self).__init__()
         self.fileOptionState=fileOptionState
         self.filePath=file
         self.logoState=logoState
         self.logoPath=logoPath
         self.delay=delay
+        self.fileName=fileName
     def run(self):
         self.signal.emit("Please Wait while we ready you video")
         self.clean()
@@ -126,13 +129,70 @@ class MyThread(QThread):
                 process.wait()
 
 
-            process = subprocess.Popen('include/ffmpeg/bin/ffmpeg.exe -i {} -c:v libx264 -profile:v high -vf scale=1920:1080 -r 25 {}'.format("tmp/tmp3.mp4", "tmp/tmp4.mp4"))
+            process = subprocess.Popen('include/ffmpeg/bin/ffmpeg.exe -i {} -c:v libx264 -profile:v high -vf scale=1920:1080 -r 25 tmp/{}.mp4'.format("tmp/tmp3.mp4", self.fileName))
             process.wait()
 
         else:
             print("in else condtion")
-            process = subprocess.Popen('include/ffmpeg/bin/ffmpeg.exe -i {} -c:v libx264 -profile:v high -vf scale=1920:1080 -r 25 {}'.format("tmp/tmp2.mp4", "tmp/tmp4.mp4"))
+            process = subprocess.Popen('include/ffmpeg/bin/ffmpeg.exe -i {} -c:v libx264 -profile:v high -vf scale=1920:1080 -r 25 tmp/{}.mp4'.format("tmp/tmp2.mp4", self.fileName))
             process.wait()
+
+class UploadThread(QThread):
+    uploadSignal=pyqtSignal(str)
+    def __init__(self,fileName,state):
+        super(QThread,self).__init__()
+        self.state=state
+        self.uploadFileName=fileName
+        self.fileName="tmp/"+fileName+".mp4"
+    def run(self,):
+        
+        
+        session=ftplib.FTP()
+        sessionip="192.168.2.100"
+        sessionhost=1026
+        sessionuser="admin"
+        sessionpwd="brandmefy"
+            
+        session.connect(sessionip,sessionhost)
+        session.login(sessionuser,sessionpwd)
+        
+        print(session.getwelcome())
+        print("opening file")
+        #print(self.videopath)
+        #self.videopath
+        self.sizeWritten=0
+        self.lastShownPercent=0
+        file=open(self.fileName,"rb")
+        self.totalSize = os.path.getsize(self.fileName)
+
+        #self.txtBox3.text()
+        if self.state==1:
+            session.storbinary('STOR {}495.mp4'.format(self.uploadFileName),file,1024,self.uploadTracker)
+        else:
+            session.storbinary('STOR {}123.mp4'.format(self.uploadFileName),file,1024,self.uploadTracker)
+        file.close()
+        print(session.dir())
+        session.quit()
+
+    def uploadTracker(self,block): 
+        self.sizeWritten += 1024
+        percentComplete = round((self.sizeWritten / self.totalSize) * 100)
+
+
+        if (self.lastShownPercent != percentComplete):
+            self.lastShownPercent = percentComplete
+
+            #self.progresslbl.setText(str(percentComplete) + " percent Complete")
+            self.uploadSignal.emit(str(percentComplete) + " percent Complete")
+            print(str(percentComplete) + " percent Complete")
+            if percentComplete == 100 :
+                #self.progresslbl.setText(str(percentComplete) + " percent Complete \n Your file was send succesfully.")
+                self.uploadSignal.emit("Your file was send succesfully.")
+class Popup(QtWidgets.QWidget):
+    def __init__(self):
+        super(Popup,self).__init__()
+        self.setGeometry(250, 220, 300, 200)
+        self.setWindowTitle("Remove File")
 
 class ProgressThread(QThread):
     progressSignal=pyqtSignal(str)

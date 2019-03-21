@@ -1,6 +1,7 @@
 import sys
 from PyQt5 import QtWidgets,QtCore
-from BrandmefyUpload import MyThread,ProgressThread
+from BrandmefyUpload import MyThread,ProgressThread,UploadThread,Popup
+from functools import partial
 import ftplib
 
 class Windows(QtWidgets.QWidget):
@@ -22,7 +23,7 @@ class Windows(QtWidgets.QWidget):
         self.heading.setObjectName("heading")
         if self.state==1:
             self.heading.setText("Brandmefy Admin Panel")
-        if self.state==2:
+        if self.state==0:
             self.heading.setText("Brandmefy")
         self.heading.setAlignment(QtCore.Qt.AlignCenter)
 
@@ -134,9 +135,10 @@ class Windows(QtWidgets.QWidget):
         self.systemHBox.setContentsMargins(0,0,0,0)
 
         self.uploadBtn=QtWidgets.QPushButton("Upload")
-        self.uploadBtn.clicked.connect(lambda:self.login())
+        self.uploadBtn.clicked.connect(lambda:self.upload())
         self.uploadBtn.setObjectName("browseBtn")
         self.deleteBtn=QtWidgets.QPushButton("List videos")
+        self.deleteBtn.clicked.connect(lambda:self.deleteFile())
         self.deleteBtn.setObjectName("browseBtn")
         self.systemBtnHBox=QtWidgets.QHBoxLayout()
         self.systemBtnHBox.setSpacing(515)
@@ -146,7 +148,7 @@ class Windows(QtWidgets.QWidget):
         self.systemBtnHBox.setContentsMargins(0,0,0,0)
 
         self.progressLabel=QtWidgets.QLabel(self)
-        self.progressLabel.setObjectName("subHeading")
+        self.progressLabel.setObjectName("progressText")
         #Main Layout
         self.layout=QtWidgets.QGridLayout()
         self.layout.addWidget(self.heading,0,0)
@@ -229,16 +231,21 @@ class Windows(QtWidgets.QWidget):
                 self.filePath=self.filePath[0]
                 self.browsePath.setText(str(self.filePath))
     def startConversion(self):
+        self.fileName()
         QtWidgets.QPushButton.setDisabled(self,True)
         if len(self.delayTxtBox.text())>0:
-            self.thread=MyThread(self.fileOptionState,self.filePath,self.logoTxt,self.logoPath,int(self.delayTxtBox.text()))
+            self.thread=MyThread(self.fileOptionState,self.filePath,self.inputFileName,self.logoTxt,self.logoPath,int(self.delayTxtBox.text()))
         else:
-            self.thread=MyThread(self.fileOptionState,self.filePath,self.logoTxt,self.logoPath)
+            self.thread=MyThread(self.fileOptionState,self.filePath,self.inputFileName,self.logoTxt,self.logoPath,delay=10)
         self.thread.signal.connect(self.progress)
         self.thread.start()
         self.progressThread=ProgressThread()
         self.progressThread.progressSignal.connect(self.progressBar)
         self.progressThread.start()
+
+    def fileName(self):
+        self.inputFileName, okPressed = QtWidgets.QInputDialog.getText(self, "File Name","Name:", QtWidgets.QLineEdit.Normal, "")
+        print(self.inputFileName)
         
     def progress(self,val):
         self.progressStatus=val
@@ -250,53 +257,82 @@ class Windows(QtWidgets.QWidget):
             self.progressLabel.setText("Done")
             self.progressThread.terminate()
 
-    def uploadTracker(self,block):
+    def upload(self):
+        self.uploadThread=UploadThread(self.inputFileName,self.state)
+        self.uploadThread.uploadSignal.connect(self.uploadProgressBar)
+        self.uploadThread.start()
+    def uploadProgressBar(self,val):
+        self.progressLabel.setText(val)
+
+    def clickBox(self,x,state):
+        if state ==QtCore.Qt.Checked:
+            self.deletefileName.append(x)
+        else:
+            self.deletefileName.remove(x)
+
+    def deleteFile(self):
+        session=ftplib.FTP()
+        sessionip="192.168.2.100"
+        sessionhost=1026
+        sessionuser="admin"
+        sessionpwd="brandmefy"
         
-        
-        self.sizeWritten += 1024
-        percentComplete = round((self.sizeWritten / self.totalSize) * 100)
-
-
-        if (self.lastShownPercent != percentComplete):
-            self.lastShownPercent = percentComplete
-
-            self.progresslbl.setText(str(percentComplete) + " percent Complete")
-            QtWidgets.QApplication.processEvents()
-            print(str(percentComplete) + " percent Complete")
-            if percentComplete == 100 :
-                self.progresslbl.setText(str(percentComplete) + " percent Complete \n Your file was send succesfully.")
-
-
-
-    def login(self):
-        
-        try:
-            session=ftplib.FTP()
-            sessionip="192.168.2.100"
-            sessionhost=1026
-            sessionuser="admin"
-            sessionpwd="brandmefy"
-            
-            session.connect(sessionip,sessionhost)
-            session.login(sessionuser,sessionpwd)
-        except:
-            print("Failed to connect please try again later")
-            return None
+        session.connect(sessionip,sessionhost)
+        session.login(sessionuser,sessionpwd)
         print(session.getwelcome())
-        print("opening file")
-        #print(self.videopath)
-        #self.videopath
-        self.sizeWritten=0
-        self.lastShownPercent=0
-        file=open(self.videopath,"rb")
-        self.totalSize = os.path.getsize(self.videopath)
+        print(session.pwd())
 
-        #self.txtBox3.text()
-        session.storbinary('STOR {}.mp4'.format(self.txtBox3.text()),file,1024,self.uploadTracker)
-        file.close()
-        print(session.dir())
-        session.quit()
         
+        files=session.nlst()
+        self.w=Popup()
+        i=0
+        dic={}
+        self.deletefileName=[]
+        for i in files:
+            if self.state==0:
+                if i.endswith("123.mp4"):
+                    dic[i]=QtWidgets.QCheckBox(i,self.w)
+            if self.state==1:
+                dic[i]=QtWidgets.QCheckBox(i,self.w)
+
+        print(dic)
+        print(files)
+        poplayout = QtWidgets.QVBoxLayout()
+        for x,y in dic.items():
+            y.stateChanged.connect(partial(self.clickBox,x))
+        for i in dic.values():
+            poplayout.addWidget(i)
+        self.deletebtn=QtWidgets.QPushButton("Delete Files",self.w)
+        self.deletebtn.setObjectName("browseBtn")
+        self.deletebtn.clicked.connect(self.DeleteFiles)
+        self.deletebtn.setToolTip("Click to Remove the File")
+        self.deletebtn.setFixedSize(150,50)
+        poplayout.addWidget(self.deletebtn)
+
+        self.w.setLayout(poplayout)
+        self.w.show()
+
+
+
+        session.quit()
+
+    def DeleteFiles(self):
+        session=ftplib.FTP()
+        sessionip="192.168.2.100"
+        sessionhost=1026
+        sessionuser="admin"
+        sessionpwd="brandmefy"
+        
+        session.connect(sessionip,sessionhost)
+        session.login(sessionuser,sessionpwd)
+        for i in self.deletefileName:
+            session.delete(i)
+            print(i+" Delete Succesfully")
+        self.deleteFile()
+        self.deletebtn.text="Delete Succesfully"
+        session.quit()
+    
+
                     
         
 

@@ -66,6 +66,9 @@ QLabel#heading{
 QLabel#subHeading{
 	font-size:14px;
 }
+QLabel#progressText{
+	font-size:16px;
+}
 QLineEdit#browsePath{
 	width:70%;
 	
